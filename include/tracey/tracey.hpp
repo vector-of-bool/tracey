@@ -21,20 +21,28 @@
 namespace trc
 {
 
+// Our string type
 using std::string;
+using charptr = const char*;
+// Our timekeeping device
 using clock = std::chrono::high_resolution_clock;
+// Our time designator
 using time_point = clock::time_point;
+// Our duration type
 using duration = clock::duration;
 
+// Process IDs and stuff
 #ifndef _WIN32
 using process_id = ::pid_t;
 #else
 using process_id = DWORD;
 #endif
+// That's part of the stdlib
 using thread_id = std::thread::id;
+// We can just store arguments as maps of strings
 using args_t = std::map<string, string>;
 
-
+// Phases have names
 enum class phase
 {
     begin,
@@ -62,11 +70,8 @@ enum class phase
 
 struct event;
 
+// Emit a caller-provided evevnt
 inline void emit(const event&);
-inline void emit(phase ph, string name, time_point = clock::now());
-inline void emit(phase ph, string name, args_t args, time_point = clock::now());
-inline void emit(string name, time_point ts, duration dur, args_t args = {});
-inline void emit(string name, duration dur, args_t args = {});
 
 #ifndef _WIN32
 inline process_id current_pid() { return ::getpid(); }
@@ -77,49 +82,63 @@ inline thread_id current_tid() { return std::this_thread::get_id(); }
 
 struct event
 {
+    // The event type
     phase ph;
-    string name;
-    std::vector<string> categories;
+    // The event's name
+    charptr name;
+    // The categories to which this event belongs
+    std::vector<charptr> categories;
+    // The time at which the event began
     time_point start;
+    // The duration of the event (optional)
     duration dur;
+    // The arguments captured with the event
     args_t args;
+    // The process ID that owns the event
     process_id pid;
+    // The thread ID that owns the event
     thread_id tid;
-    event(phase ph, string name, time_point start = clock::now())
-        : ph{ph}
-        , name(std::move(name))
-        , start{start}
-        , pid{current_pid()}
-        , tid{current_tid()}
+    // Construct a new event with the given type with the given name
+    event(phase ph, charptr name, time_point start = clock::now())
+        : ph{ ph }
+        , name(name)
+        , start{ start }
+        , pid{ current_pid() }
+        , tid{ current_tid() }
     {
     }
-    event(phase ph, string name, args_t args, time_point ts)
-        : ph{ph}
-        , name(std::move(name))
-        , start{ts}
+    // Construct a new event with the given type, name, and arguments
+    event(phase ph, charptr name, args_t args, time_point ts = clock::now())
+        : ph{ ph }
+        , name(name)
+        , start{ ts }
         , args(std::move(args))
-        , pid{current_pid()}
-        , tid{current_tid()}
+        , pid{ current_pid() }
+        , tid{ current_tid() }
     {
     }
-    event(string name, time_point start, duration dur, args_t args = {})
-        : ph{phase::complete}
+    // Construct a complete event with the given name, starting at a certain
+    // time with a certain duration
+    event(charptr name, time_point start, duration dur, args_t args = {})
+        : ph{ phase::complete }
         , name(std::move(name))
-        , start{start}
-        , dur{dur}
+        , start{ start }
+        , dur{ dur }
         , args(std::move(args))
-        , pid{current_pid()}
-        , tid{current_tid()}
+        , pid{ current_pid() }
+        , tid{ current_tid() }
     {
     }
-    event(string name, duration dur, args_t args = {})
-        : ph{phase::complete}
+    // Construct an event with the given name, that lasted the given duration
+    // (start time is deduced)
+    event(charptr name, duration dur, args_t args = {})
+        : ph{ phase::complete }
         , name(std::move(name))
-        , start{clock::now() - dur}
-        , dur{dur}
+        , start{ clock::now() - dur }
+        , dur{ dur }
         , args(std::move(args))
-        , pid{current_pid()}
-        , tid{current_tid()}
+        , pid{ current_pid() }
+        , tid{ current_tid() }
     {
     }
 };
@@ -130,6 +149,7 @@ class tracer
     {
         virtual void write(const char*, std::streamsize) = 0;
         virtual std::ostream& as_ostream() = 0;
+        void write(const char* str) { write(str, std::strlen(str)); }
         template <std::size_t N> void write(const char (&arr)[N])
         {
             write(arr, N - 1);
@@ -203,7 +223,8 @@ class tracer
 
     void _write_event(const event& e)
     {
-        if (_any_written) _write(",");
+        if (_any_written)
+            _write(",");
         _any_written = true;
         _write(R"({"name":)");
         _write("\"");
@@ -242,7 +263,8 @@ class tracer
             auto first = true;
             for (auto& pair : e.args)
             {
-                if (!first) _write(",");
+                if (!first)
+                    _write(",");
                 first = false;
                 _write("\"");
                 _write(pair.first);
@@ -258,7 +280,8 @@ class tracer
 public:
     template <typename Stream>
     tracer(Stream&& strm)
-        : _writer{new stream_writer_impl<Stream>{std::forward<Stream>(strm)}}
+        : _writer{ new stream_writer_impl<Stream>{
+              std::forward<Stream>(strm) } }
     {
         _writer->write("[");
     }
@@ -266,28 +289,17 @@ public:
     ~tracer()
     {
         flush();
-        if (_writer) _writer->write("]");
+        if (_writer)
+            _writer->write("]");
     }
-
-    void emit(string name, time_point ts, duration dur, args_t args = {});
-    void emit(string name, duration dur, args_t args = {});
 
     void emit(const event& e) { _events.push_back(e); }
     void emit(event&& e) { _events.emplace_back(std::move(e)); }
 
-    void emit(phase ph, string name, time_point ts = clock::now())
-    {
-        emit(ph, name, {}, ts);
-    }
-
-    void emit(phase ph, string name, args_t args, time_point ts = clock::now())
-    {
-        _events.emplace_back(ph, name, args, ts);
-    }
-
     void flush()
     {
-        for (auto& event : _events) _write_event(event);
+        for (auto& event : _events)
+            _write_event(event);
         _events.clear();
     }
 };
@@ -333,12 +345,12 @@ class tracer_locked
 
 public:
     tracer_locked(std::unique_lock<std::mutex> lk)
-        : _lk{std::move(lk)}
+        : _lk{ std::move(lk) }
     {
     }
     tracer_locked(std::unique_lock<std::mutex> lk, tracer& tr)
-        : _tracer{&tr}
-        , _lk{std::move(lk)}
+        : _tracer{ &tr }
+        , _lk{ std::move(lk) }
     {
     }
 
@@ -353,9 +365,10 @@ public:
 
 tracer_locked lock_tracer()
 {
-    std::unique_lock<std::mutex> lk{get_tracer_lock()};
-    if (enabled()) return {std::move(lk), get_tracer()};
-    return {std::move(lk)};
+    std::unique_lock<std::mutex> lk{ get_tracer_lock() };
+    if (enabled())
+        return { std::move(lk), get_tracer() };
+    return { std::move(lk) };
 }
 }
 
@@ -365,7 +378,7 @@ template <typename Stream> inline bool enable(Stream&& strm)
 {
     auto tr = detail::lock_tracer();
     assert(!tr);
-    detail::get_tracer_ptr().reset(new tracer{std::forward<Stream>(strm)});
+    detail::get_tracer_ptr().reset(new tracer{ std::forward<Stream>(strm) });
     detail::enabled_bool().store(true);
     return true;
 }
@@ -373,16 +386,19 @@ template <typename Stream> inline bool enable(Stream&& strm)
 inline bool disable()
 {
     auto tr = detail::lock_tracer();
-    if (!tr) return false;
+    if (!tr)
+        return false;
     detail::get_tracer_ptr().reset();
     detail::enabled_bool().store(false);
     return true;
 }
 
 #define TRC_DOUBLECHECK                                                        \
-    if (!::trc::enabled()) return;                                             \
+    if (!::trc::enabled())                                                     \
+        return;                                                                \
     auto tr = ::trc::detail::lock_tracer();                                    \
-    if (!tr) return;
+    if (!tr)                                                                   \
+        return;
 
 
 inline void emit(const event& ev)
@@ -391,48 +407,24 @@ inline void emit(const event& ev)
     tr->emit(ev);
 }
 
-inline void emit(phase ph, string name, time_point ts)
+inline void start(charptr name, args_t args = {})
 {
-    TRC_DOUBLECHECK;
-    tr->emit(ph, name, ts);
+    emit({ phase::begin, name, args });
 }
 
-inline void emit(phase ph, string name, args_t args, time_point ts)
+inline void finish(charptr name, args_t args = {})
 {
-    TRC_DOUBLECHECK;
-    tr->emit(ph, name, args, ts);
-}
-
-inline void emit(string name, time_point ts, duration dur, args_t args)
-{
-    TRC_DOUBLECHECK;
-    tr->emit(name, ts, dur, args);
-}
-
-inline void emit(string name, duration dur, args_t args)
-{
-    TRC_DOUBLECHECK;
-    tr->emit(name, dur, args);
-}
-
-inline void start(string name, args_t args = {})
-{
-    emit(phase::begin, name, args);
-}
-
-inline void finish(string name, args_t args = {})
-{
-    emit(phase::end, name, args);
+    emit({ phase::end, name, args });
 }
 
 inline void set_process_name(string name)
 {
-    emit(phase::meta, "process_name", args_t{{"name", name}});
+    emit({ phase::meta, "process_name", args_t{ { "name", name } } });
 }
 
 inline void set_thread_name(string name)
 {
-    emit(phase::meta, "thread_name", args_t{{"name", name}});
+    emit({ phase::meta, "thread_name", args_t{ { "name", name } } });
 }
 
 namespace detail
@@ -441,16 +433,16 @@ namespace detail
 class lifetime_tracer
 {
     bool _enabled;
-    string name;
+    charptr name;
 
 public:
-    lifetime_tracer(string name)
-        : _enabled{enabled()}
+    lifetime_tracer(charptr name)
+        : _enabled{ enabled() }
         , name(name)
     {
         if (_enabled)
         {
-            emit(phase::begin, name);
+            emit({ phase::begin, name });
         }
     }
 
@@ -458,7 +450,7 @@ public:
     {
         if (_enabled)
         {
-            emit(phase::end, name);
+            emit({ phase::end, name });
         }
     }
 };

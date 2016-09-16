@@ -27,7 +27,7 @@ TEST_CASE("Can emit an event")
         // auto now = trc::clock::now();
         trc::tracer tr{std::ref(strm)};
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        tr.emit(trc::phase::instant, "meow");
+        tr.emit({trc::phase::instant, "meow"});
     }
     CHECK(strm.str() == R"([{"ph":"i","name":"meow","ts":""}])");
 }
