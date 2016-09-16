@@ -1,5 +1,5 @@
 if(NOT TARGET catch::main)
-    set(catch_cpp "${CMAKE_CURRENT_BINARY_DIR}/catch.cpp")
+    get_filename_component(catch_cpp "${CMAKE_CURRENT_BINARY_DIR}/catch.cpp" ABSOLUTE)
     add_custom_command(OUTPUT catch.cpp
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${catch_hpp}" "${catch_cpp}"
         COMMENT "Copying Catch header..."

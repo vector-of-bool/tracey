@@ -12,7 +12,11 @@
 #include <thread>
 #include <vector>
 
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <windows.h>
+#endif
 
 namespace trc
 {
@@ -22,7 +26,11 @@ using clock = std::chrono::high_resolution_clock;
 using time_point = clock::time_point;
 using duration = clock::duration;
 
+#ifndef _WIN32
 using process_id = ::pid_t;
+#else
+using process_id = DWORD;
+#endif
 using thread_id = std::thread::id;
 using args_t = std::map<string, string>;
 
@@ -60,7 +68,11 @@ inline void emit(phase ph, string name, args_t args, time_point = clock::now());
 inline void emit(string name, time_point ts, duration dur, args_t args = {});
 inline void emit(string name, duration dur, args_t args = {});
 
+#ifndef _WIN32
 inline process_id current_pid() { return ::getpid(); }
+#else
+inline process_id current_pid() { return ::GetCurrentProcessId(); }
+#endif
 inline thread_id current_tid() { return std::this_thread::get_id(); }
 
 struct event
